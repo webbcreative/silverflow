@@ -88,8 +88,7 @@ export function buildVolumeMap(historyRows, days = 14) {
   const map = new Map();
   for (const row of historyRows || []) {
     const total = (row.data || []).reduce((sum, point) => sum + Number(point.item_count || 0), 0);
-    const observedDays = Math.max(1, (row.data || []).length || days);
-    map.set(row.item_id, total / observedDays);
+    map.set(row.item_id, total / Math.max(1, Number(days || 1)));
   }
   return map;
 }
