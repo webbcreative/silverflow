@@ -33,7 +33,7 @@ jobs:
       - name: Prepare static artifact
         run: |
           mkdir -p _site
-          cp index.html styles.css _site/
+          cp index.html styles.css enhancements.css _site/
           cp -R src data _site/
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
