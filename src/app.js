@@ -9,7 +9,7 @@ const esc=v=>String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'
 const state={settings:loadSettings(),favorites:loadFavorites(),overrides:loadOverrides(),catalog:[],catalogSource:'seed',results:[],tab:'scanner',selected:null,sort:['score','desc'],scanning:false,status:'Loading catalog…',error:'',updated:null};
 const app=$('#app');
 const save=(k,v)=>{state.settings={...state.settings,[k]:v};saveSettings(state.settings)};
-const scenario=(r,focus=false)=>{const m=focus?r.modes.focus:r.modes.baseline,a=m.bestRoyal,b=m.caerleon;return !a?b:!b?a:a.profit>=b.profit?a:b};
+const scenario=(r,focus=false)=>{const m=focus?r.modes.focus:r.modes.baseline,all=[m.bestRoyal,m.caerleon].filter(Boolean),fresh=all.filter(x=>x.worstAge<=state.settings.freshnessHours),pool=fresh.length?fresh:all;return pool.sort((a,b)=>b.profit-a.profit)[0]||null};
 const deployable=()=>Math.min(Number(state.settings.wallet||0),Number(state.settings.budget||state.settings.wallet||0));
 const categories=()=>[...new Set(state.catalog.map(x=>x.category).filter(Boolean))].sort();
 const candidateItems=()=>state.catalog.filter(x=>(state.settings.tier==='all'||+x.tier===+state.settings.tier)&&(!state.settings.enchants.length||state.settings.enchants.includes(+(x.enchantment||0)))&&(state.settings.category==='all'||x.category===state.settings.category));
