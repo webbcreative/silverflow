@@ -19,6 +19,7 @@ const priceRows = {
   'ARTIFACT|Lymhurst': { item_id: 'ARTIFACT', city: 'Lymhurst', sell_price_min: 400, sell_price_min_date: new Date().toISOString(), buy_price_max: 350, buy_price_max_date: new Date().toISOString() },
 };
 const lookup = (id, city) => priceRows[`${id}|${city}`];
+
 const close = (a, b, epsilon = 1e-6) => assert.ok(Math.abs(a - b) < epsilon, `${a} ≈ ${b}`);
 
 test('resource return rate uses Albion production-bonus conversion', () => {
@@ -53,4 +54,20 @@ test('listed sale adds setup fee and non-premium doubles transaction tax', () =>
   const sale = applySale({ craft, bmRecord: bm, settings: local, volume: 50 });
   assert.equal(sale.saleTax, 34_000 * MARKET_FEES.nonPremiumTax);
   assert.equal(sale.saleSetup, 34_000 * MARKET_FEES.setupFee);
+});
+
+
+test('multi-output recipes normalize material and silver cost per produced item', () => {
+  const multi = {
+    id: 'MULTI', bonusCity: 'Lymhurst', variants: [{ amountCrafted: 10, silver: 1_000, materials: [
+      { id: 'CLOTH', count: 20, returnable: true },
+      { id: 'ARTIFACT', count: 10, returnable: false },
+    ] }],
+  };
+  const craft = evaluateCraftCity({ recipe: multi, city: 'Lymhurst', specialtyCity: 'Lymhurst', focus: false, settings, priceLookup: lookup });
+  assert.equal(craft.grossMaterials, 4_600);
+  assert.equal(craft.returnableGross, 4_200);
+  assert.equal(craft.flatSilver, 100);
+  close(craft.materials[0].count, 2);
+  close(craft.materials[1].count, 1);
 });
