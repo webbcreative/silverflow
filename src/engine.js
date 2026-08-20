@@ -7,8 +7,6 @@ export const MARKET_FEES = {
 };
 
 export function resourceReturnRate({ specialty = false, focus = false, extraProductionBonus = 0 } = {}) {
-  // Albion production bonuses are additive before conversion: bonus / (1 + bonus).
-  // City base +18%, matching crafting specialty +15%, focus +59%.
   const bonus = 0.18 + (specialty ? 0.15 : 0) + (focus ? 0.59 : 0) + Number(extraProductionBonus || 0) / 100;
   return bonus / (1 + bonus);
 }
@@ -46,17 +44,11 @@ export function salePriceFor(record, mode, overrideLookup, server) {
 }
 
 function evaluateVariant({ variant, city, specialtyCity, focus, settings, priceLookup, overrideLookup }) {
-  const rrr = resourceReturnRate({
-    specialty: specialtyCity === city,
-    focus,
-    extraProductionBonus: settings.extraProductionBonus,
-  });
-
+  const rrr = resourceReturnRate({ specialty: specialtyCity === city, focus, extraProductionBonus: settings.extraProductionBonus });
   let grossMaterials = 0;
   let returnableGross = 0;
   let oldestMaterialAge = 0;
   const materials = [];
-
   const amountCrafted = Math.max(1, Number(variant.amountCrafted || 1));
   for (const material of variant.materials) {
     const record = priceLookup(material.id, city);
@@ -70,7 +62,6 @@ function evaluateVariant({ variant, city, specialtyCity, focus, settings, priceL
     oldestMaterialAge = Math.max(oldestMaterialAge, age);
     materials.push({ ...material, count: countPerItem, craftCount: material.count, unitPrice: quote.price, gross: lineGross, ageHours: age, overridden: !!quote.overridden });
   }
-
   const returnedValue = returnableGross * rrr;
   const trueMaterials = grossMaterials - returnedValue;
   const buySetup = settings.acquisitionMode === 'order' ? grossMaterials * MARKET_FEES.setupFee : 0;
@@ -78,23 +69,7 @@ function evaluateVariant({ variant, city, specialtyCity, focus, settings, priceL
   const station = Number(settings.stationFee || 0);
   const trueCraftCost = trueMaterials + buySetup + flatSilver + station;
   const cashRequired = grossMaterials + buySetup + flatSilver + station;
-
-  return {
-    variant,
-    city,
-    rrr,
-    grossMaterials,
-    returnableGross,
-    returnedValue,
-    trueMaterials,
-    buySetup,
-    flatSilver,
-    station,
-    trueCraftCost,
-    cashRequired,
-    oldestMaterialAge,
-    materials,
-  };
+  return { variant, city, rrr, grossMaterials, returnableGross, returnedValue, trueMaterials, buySetup, flatSilver, station, trueCraftCost, cashRequired, oldestMaterialAge, materials };
 }
 
 export function evaluateCraftCity(args) {
@@ -107,7 +82,6 @@ export function applySale({ craft, bmRecord, settings, overrideLookup, volume = 
   if (!craft || !bmRecord) return null;
   const sale = salePriceFor(bmRecord, settings.saleMode, overrideLookup, settings.server);
   if (!sale.price) return null;
-
   const taxRate = settings.premium ? MARKET_FEES.premiumTax : MARKET_FEES.nonPremiumTax;
   const saleTax = sale.price * taxRate;
   const saleSetup = settings.saleMode === 'order' ? sale.price * MARKET_FEES.setupFee : 0;
@@ -117,22 +91,13 @@ export function applySale({ craft, bmRecord, settings, overrideLookup, volume = 
   const saleAge = quoteAgeHours(sale.timestamp);
   const worstAge = Math.max(craft.oldestMaterialAge, saleAge);
   const fresh = freshnessLabel(worstAge, settings.freshnessHours);
-  const batch = {
-    quantity,
-    capital: craft.cashRequired * quantity,
-    trueCost: craft.trueCraftCost * quantity,
-    grossSale: sale.price * quantity,
-    netSale: netSale * quantity,
-    profit: profit * quantity,
-  };
-
+  const batch = { quantity, capital: craft.cashRequired * quantity, trueCost: craft.trueCraftCost * quantity, grossSale: sale.price * quantity, netSale: netSale * quantity, profit: profit * quantity };
   return { ...craft, salePrice: sale.price, saleTax, saleSetup, netSale, profit, roi, saleAge, worstAge, freshness: fresh, volume, batch };
 }
 
 export function evaluateItem({ recipe, settings, priceLookup, bmRecord, volume, overrideLookup }) {
   const focusStates = [false, true];
   const result = { recipe, modes: {} };
-
   for (const focus of focusStates) {
     const key = focus ? 'focus' : 'baseline';
     const royalCandidates = ROYAL_CITIES.map(city => {
@@ -144,12 +109,10 @@ export function evaluateItem({ recipe, settings, priceLookup, bmRecord, volume, 
     const caerleon = applySale({ craft: caerleonCraft, bmRecord, settings, overrideLookup, volume });
     result.modes[key] = { bestRoyal, caerleon };
   }
-
   const baselineCandidates = [result.modes.baseline.bestRoyal, result.modes.baseline.caerleon].filter(Boolean);
   if (!baselineCandidates.length) return null;
   const freshCandidates = baselineCandidates.filter(x => x.worstAge <= settings.freshnessHours);
   const primary = (freshCandidates.length ? freshCandidates : baselineCandidates).sort((a, b) => b.profit - a.profit)[0];
-
   const liquidity = Math.log1p(Math.max(0, volume || 0));
   result.score = Math.max(0, primary.profit) * Math.max(1, liquidity) * primary.freshness.factor;
   result.primary = primary;
@@ -158,13 +121,23 @@ export function evaluateItem({ recipe, settings, priceLookup, bmRecord, volume, 
 
 export function batchMetrics(scenario, quantity) {
   if (!scenario) return null;
+  return { quantity, capital: scenario.cashRequired * quantity, trueCost: scenario.trueCraftCost * quantity, returnedValue: scenario.returnedValue * quantity, netSale: scenario.netSale * quantity, profit: scenario.profit * quantity, roi: scenario.roi };
+}
+
+export function componentBatchMetrics(scenario, material, quantity = 1) {
+  if (!scenario || !material) return null;
+  const q = Math.max(0, Number(quantity || 0));
+  const requiredQty = Number(material.count || 0) * q;
+  const gross = Number(material.gross || 0) * q;
+  const returnedQty = material.returnable ? requiredQty * Number(scenario.rrr || 0) : 0;
+  const returnedValue = material.returnable ? gross * Number(scenario.rrr || 0) : 0;
   return {
-    quantity,
-    capital: scenario.cashRequired * quantity,
-    trueCost: scenario.trueCraftCost * quantity,
-    returnedValue: scenario.returnedValue * quantity,
-    netSale: scenario.netSale * quantity,
-    profit: scenario.profit * quantity,
-    roi: scenario.roi,
+    quantity: q,
+    requiredQty,
+    gross,
+    returnedQty,
+    returnedValue,
+    consumedQty: requiredQty - returnedQty,
+    consumedCost: gross - returnedValue,
   };
 }
