@@ -57,22 +57,24 @@ function evaluateVariant({ variant, city, specialtyCity, focus, settings, priceL
   let oldestMaterialAge = 0;
   const materials = [];
 
+  const amountCrafted = Math.max(1, Number(variant.amountCrafted || 1));
   for (const material of variant.materials) {
     const record = priceLookup(material.id, city);
     const quote = priceFor(record, settings.acquisitionMode, overrideLookup, settings.server);
     if (!quote.price) return null;
-    const lineGross = quote.price * material.count;
+    const countPerItem = Number(material.count || 0) / amountCrafted;
+    const lineGross = quote.price * countPerItem;
     grossMaterials += lineGross;
     if (material.returnable) returnableGross += lineGross;
     const age = quoteAgeHours(quote.timestamp);
     oldestMaterialAge = Math.max(oldestMaterialAge, age);
-    materials.push({ ...material, unitPrice: quote.price, gross: lineGross, ageHours: age, overridden: !!quote.overridden });
+    materials.push({ ...material, count: countPerItem, craftCount: material.count, unitPrice: quote.price, gross: lineGross, ageHours: age, overridden: !!quote.overridden });
   }
 
   const returnedValue = returnableGross * rrr;
   const trueMaterials = grossMaterials - returnedValue;
   const buySetup = settings.acquisitionMode === 'order' ? grossMaterials * MARKET_FEES.setupFee : 0;
-  const flatSilver = Number(variant.silver || 0) / Number(variant.amountCrafted || 1);
+  const flatSilver = Number(variant.silver || 0) / amountCrafted;
   const station = Number(settings.stationFee || 0);
   const trueCraftCost = trueMaterials + buySetup + flatSilver + station;
   const cashRequired = grossMaterials + buySetup + flatSilver + station;
@@ -143,10 +145,10 @@ export function evaluateItem({ recipe, settings, priceLookup, bmRecord, volume, 
     result.modes[key] = { bestRoyal, caerleon };
   }
 
-  const primary = result.modes.baseline.bestRoyal?.profit >= result.modes.baseline.caerleon?.profit
-    ? result.modes.baseline.bestRoyal
-    : result.modes.baseline.caerleon;
-  if (!primary) return null;
+  const baselineCandidates = [result.modes.baseline.bestRoyal, result.modes.baseline.caerleon].filter(Boolean);
+  if (!baselineCandidates.length) return null;
+  const freshCandidates = baselineCandidates.filter(x => x.worstAge <= settings.freshnessHours);
+  const primary = (freshCandidates.length ? freshCandidates : baselineCandidates).sort((a, b) => b.profit - a.profit)[0];
 
   const liquidity = Math.log1p(Math.max(0, volume || 0));
   result.score = Math.max(0, primary.profit) * Math.max(1, liquidity) * primary.freshness.factor;
