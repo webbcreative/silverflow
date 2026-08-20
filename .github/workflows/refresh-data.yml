@@ -1,0 +1,31 @@
+name: Refresh Albion crafting data
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 9 * * 2'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Generate current catalog
+        run: python scripts/generate_catalog.py
+      - name: Commit catalog if changed
+        run: |
+          if git diff --quiet -- data/catalog.json; then
+            echo "Catalog unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- data/catalog.json
+          git commit -m "data: refresh Albion crafting catalog"
+          git push
