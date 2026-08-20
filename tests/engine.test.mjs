@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applySale, evaluateCraftCity, MARKET_FEES, resourceReturnRate } from '../src/engine.js';
+import { applySale, componentBatchMetrics, evaluateCraftCity, MARKET_FEES, resourceReturnRate } from '../src/engine.js';
 
 const settings = {
   server: 'west', premium: true, acquisitionMode: 'instant', saleMode: 'instant',
@@ -56,7 +56,6 @@ test('listed sale adds setup fee and non-premium doubles transaction tax', () =>
   assert.equal(sale.saleSetup, 34_000 * MARKET_FEES.setupFee);
 });
 
-
 test('multi-output recipes normalize material and silver cost per produced item', () => {
   const multi = {
     id: 'MULTI', bonusCity: 'Lymhurst', variants: [{ amountCrafted: 10, silver: 1_000, materials: [
@@ -70,4 +69,20 @@ test('multi-output recipes normalize material and silver cost per produced item'
   assert.equal(craft.flatSilver, 100);
   close(craft.materials[0].count, 2);
   close(craft.materials[1].count, 1);
+});
+
+test('component batch audit exposes required, returned and consumed quantities and values', () => {
+  const craft = evaluateCraftCity({ recipe, city: 'Lymhurst', specialtyCity: 'Lymhurst', focus: false, settings, priceLookup: lookup });
+  const cloth50 = componentBatchMetrics(craft, craft.materials[0], 50);
+  assert.equal(cloth50.requiredQty, 400);
+  assert.equal(cloth50.gross, 840_000);
+  close(cloth50.returnedQty, 400 * craft.rrr);
+  close(cloth50.returnedValue, 840_000 * craft.rrr);
+  close(cloth50.consumedCost, 840_000 * (1 - craft.rrr));
+
+  const artifact100 = componentBatchMetrics(craft, craft.materials[1], 100);
+  assert.equal(artifact100.requiredQty, 100);
+  assert.equal(artifact100.returnedQty, 0);
+  assert.equal(artifact100.returnedValue, 0);
+  assert.equal(artifact100.consumedCost, 40_000);
 });
